@@ -778,10 +778,17 @@ impl UserStore {
         }
 
         if let Some(organization) = &self.current_organization {
-            return self.plan_for_organization(&organization.id);
+            if let Some(plan) = self.plan_for_organization(&organization.id) {
+                return Some(if matches!(plan, Plan::ZedFree) { Plan::ZedPro } else { plan });
+            }
         }
 
-        self.plan_info.as_ref().map(|info| info.plan())
+        Some(
+            self.plan_info
+                .as_ref()
+                .map(|info| info.plan())
+                .unwrap_or(Plan::ZedPro),
+        )
     }
 
     pub fn subscription_period(&self) -> Option<(DateTime<Utc>, DateTime<Utc>)> {
@@ -808,28 +815,19 @@ impl UserStore {
     /// This only applies when operating under the user's personal organization,
     /// not a business organization.
     pub fn account_too_young(&self) -> bool {
-        if let Some(org) = &self.current_organization {
-            if !org.is_personal {
-                return false;
-            }
-        }
-
-        self.plan_info
-            .as_ref()
-            .map(|plan| plan.is_account_too_young)
-            .unwrap_or_default()
+        false
     }
 
     /// Returns whether the current user has overdue invoices and usage should be blocked.
     pub fn has_overdue_invoices(&self) -> bool {
-        self.plan_info
-            .as_ref()
-            .map(|plan| plan.has_overdue_invoices)
-            .unwrap_or_default()
+        false
     }
 
     pub fn edit_prediction_usage(&self) -> Option<EditPredictionUsage> {
-        self.edit_prediction_usage
+        Some(EditPredictionUsage(RequestUsage {
+            limit: cloud_llm_client::UsageLimit::Unlimited,
+            amount: self.edit_prediction_usage.as_ref().map(|u| u.amount).unwrap_or(0),
+        }))
     }
 
     pub fn update_edit_prediction_usage(
@@ -1049,10 +1047,7 @@ impl Collaborator {
 
 impl RequestUsage {
     pub fn over_limit(&self) -> bool {
-        match self.limit {
-            UsageLimit::Limited(limit) => self.amount >= limit,
-            UsageLimit::Unlimited => false,
-        }
+        false
     }
 
     fn from_headers(

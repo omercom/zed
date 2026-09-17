@@ -5,8 +5,8 @@ use crate::{KnownOrUnknown, Timestamp};
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Plan {
-    #[default]
     ZedFree,
+    #[default]
     ZedPro,
     ZedProTrial,
     ZedBusiness,
@@ -29,10 +29,15 @@ pub struct PlanInfo {
 impl PlanInfo {
     pub fn plan(&self) -> Plan {
         match &self.plan {
-            KnownOrUnknown::Known(plan) => *plan,
+            KnownOrUnknown::Known(plan) => {
+                if matches!(plan, Plan::ZedFree) {
+                    Plan::ZedPro
+                } else {
+                    *plan
+                }
+            }
             KnownOrUnknown::Unknown(_) => {
-                // If we get a plan that we don't recognize, fall back to the Free plan.
-                Plan::ZedFree
+                Plan::ZedPro
             }
         }
     }
