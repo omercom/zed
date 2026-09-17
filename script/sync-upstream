@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -e
+
+# Repository kök dizinine git
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+BRANCH="omer"
+UPSTREAM_REMOTE="upstream"
+FORK_REMOTE="origin"
+
+echo "=================================================="
+echo "🔄 Zed Upstream Güncelleme ve Senkronizasyon Aracı"
+echo "=================================================="
+
+# 1. Değişiklik kontrolü (çalışma ağacı temiz mi?)
+STASHED=0
+if ! git diff-index --quiet HEAD -- 2>/dev/null; then
+    echo "⚠️  Kaydedilmemiş değişiklikler var, geçici stash'e alınıyor..."
+    git stash push -m "auto-sync-stash-$(date +%s)"
+    STASHED=1
+fi
+
+# 2. Upstream'den son değişiklikleri çek
+echo "📥 1/5: Resmi Zed (upstream) güncellemeleri çekiliyor..."
+git fetch "$UPSTREAM_REMOTE"
+
+# 3. main branch'ini upstream ile senkronize et
+echo "🔀 2/5: Yerel 'main' branch'i upstream/main ile güncelleniyor..."
+git checkout main
+git merge --ff-only "$UPSTREAM_REMOTE/main"
+
+# 4. Kendi fork'undaki (origin) main'i de güncelle
+echo "🚀 3/5: Fork'undaki (origin) 'main' branch'i güncelleniyor..."
+git push "$FORK_REMOTE" main
+
+# 5. Kendi çalışma branch'ine geç ve rebase yap
+echo "🌿 4/5: '$BRANCH' branch'ine geçilip güncel main üzerine rebase yapılıyor..."
+git checkout "$BRANCH"
+
+if git rebase main; then
+    echo "✅ Rebase başarılı!"
+else
+    echo "❌ Rebase sırasında çakışma (conflict) oluştu!"
+    echo "Lütfen çakışan dosyaları düzeltip 'git rebase --continue' yapın."
+    exit 1
+fi
+
+# 6. Güncellenen çalışma branch'ini fork'a push et
+echo "📤 5/5: Güncellenen '$BRANCH' branch'i fork'a push ediliyor..."
+git push --force-with-lease "$FORK_REMOTE" "$BRANCH"
+
+# Eğer stash yapıldıysa geri yükle
+if [[ $STASHED -eq 1 ]]; then
+    echo "📦 Geçici stash değişiklikleri geri yükleniyor..."
+    git stash pop
+fi
+
+echo ""
+echo "=================================================="
+echo "🎉 Başarıyla tamamlandı!"
+echo "   - 'main' branch'i resmi repo ile eşitlendi."
+echo "   - 'main' fork'una gönderildi."
+echo "   - '$BRANCH' branch'in en son main kodlarının üzerine taşındı (rebase)."
+echo "   - Değişikliklerin fork'una push edildi."
+echo "=================================================="
