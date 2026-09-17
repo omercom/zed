@@ -13,7 +13,27 @@ echo "=================================================="
 echo "🔄 Zed Upstream Güncelleme ve Senkronizasyon Aracı"
 echo "=================================================="
 
-# 1. Değişiklik kontrolü (çalışma ağacı temiz mi?)
+# 1. Upstream'den son referansları çek
+echo "📥 Resmi Zed (upstream) güncellemeleri kontrol ediliyor..."
+git fetch "$UPSTREAM_REMOTE"
+
+LOCAL_MAIN=$(git rev-parse main)
+REMOTE_MAIN=$(git rev-parse "$UPSTREAM_REMOTE/main")
+BEHIND_COMMITS=$(git rev-list --count "$BRANCH..$UPSTREAM_REMOTE/main")
+
+# 2. Fark kontrolü: Yeni commit var mı?
+if [[ "$LOCAL_MAIN" == "$REMOTE_MAIN" && "$BEHIND_COMMITS" -eq 0 ]]; then
+    echo "✨ Resmi repoda yeni bir değişiklik yok! Projeniz zaten en güncel sürümde."
+    echo "=================================================="
+    exit 0
+fi
+
+echo "📦 Resmi repoda $BEHIND_COMMITS adet yeni commit tespit edildi!"
+echo "Son gelen bazı güncellemeler:"
+git log --oneline -n 5 "$UPSTREAM_REMOTE/main" "^$LOCAL_MAIN" 2>/dev/null || true
+echo "--------------------------------------------------"
+
+# 3. Değişiklik kontrolü (çalışma ağacı temiz mi?)
 STASHED=0
 if ! git diff-index --quiet HEAD -- 2>/dev/null; then
     echo "⚠️  Kaydedilmemiş değişiklikler var, geçici stash'e alınıyor..."
@@ -21,21 +41,17 @@ if ! git diff-index --quiet HEAD -- 2>/dev/null; then
     STASHED=1
 fi
 
-# 2. Upstream'den son değişiklikleri çek
-echo "📥 1/5: Resmi Zed (upstream) güncellemeleri çekiliyor..."
-git fetch "$UPSTREAM_REMOTE"
-
-# 3. main branch'ini upstream ile senkronize et
-echo "🔀 2/5: Yerel 'main' branch'i upstream/main ile güncelleniyor..."
+# 4. main branch'ini upstream ile senkronize et
+echo "🔀 1/4: Yerel 'main' branch'i güncelleniyor..."
 git checkout main
 git merge --ff-only "$UPSTREAM_REMOTE/main"
 
-# 4. Kendi fork'undaki (origin) main'i de güncelle
-echo "🚀 3/5: Fork'undaki (origin) 'main' branch'i güncelleniyor..."
+# 5. Kendi fork'undaki (origin) main'i de güncelle
+echo "🚀 2/4: Fork'undaki 'main' branch'i güncelleniyor..."
 git push "$FORK_REMOTE" main
 
-# 5. Kendi çalışma branch'ine geç ve rebase yap
-echo "🌿 4/5: '$BRANCH' branch'ine geçilip güncel main üzerine rebase yapılıyor..."
+# 6. Kendi çalışma branch'ine geç ve rebase yap
+echo "🌿 3/4: '$BRANCH' branch'ine geçilip güncel kodların üzerine taşınıyor (rebase)..."
 git checkout "$BRANCH"
 
 if git rebase main; then
@@ -46,8 +62,8 @@ else
     exit 1
 fi
 
-# 6. Güncellenen çalışma branch'ini fork'a push et
-echo "📤 5/5: Güncellenen '$BRANCH' branch'i fork'a push ediliyor..."
+# 7. Güncellenen çalışma branch'ini fork'a push et
+echo "📤 4/4: Güncellenen '$BRANCH' branch'i fork'a push ediliyor..."
 git push --force-with-lease "$FORK_REMOTE" "$BRANCH"
 
 # Eğer stash yapıldıysa geri yükle
@@ -58,9 +74,7 @@ fi
 
 echo ""
 echo "=================================================="
-echo "🎉 Başarıyla tamamlandı!"
-echo "   - 'main' branch'i resmi repo ile eşitlendi."
-echo "   - 'main' fork'una gönderildi."
-echo "   - '$BRANCH' branch'in en son main kodlarının üzerine taşındı (rebase)."
-echo "   - Değişikliklerin fork'una push edildi."
+echo "🎉 Güncelleme başarıyla tamamlandı!"
+echo "   - $BEHIND_COMMITS yeni güncelleme '$BRANCH' branch'inize entegre edildi."
+echo "   - Fork'unuz güncellendi."
 echo "=================================================="
